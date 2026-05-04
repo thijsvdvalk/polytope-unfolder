@@ -1,0 +1,11 @@
+# Polytopes
+polytopes/
+
+# Virtual environment
+venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
