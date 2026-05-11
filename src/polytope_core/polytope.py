@@ -25,17 +25,21 @@ class Polytope:
         self.simplices.flags.writeable = False
         self.normals.flags.writeable = False
         nx.freeze(self.neigh_graph)
+    
+    def unfold_from_spanning_tree(self, spanning_tree: nx.Graph) -> Net:
+        traversal = traversal_from_spanning_tree(spanning_tree)
+        return self._unfold(traversal)
 
-
-    def unfold(self, traversal: list[tuple[int, int]]) -> Net:
-        assert_correct_traversal(traversal)
+    def _unfold(self, traversal: list[tuple[int, int]]) -> Net:
 
         cells: list[Cell | None] = [None] * len(self.simplices)
         first = traversal[0][0]
+
         cells[first] = compute_first_cell(
             self.points[self.simplices[first]],
             self.normals[first],
         )
+
         for prev, cur in traversal:
             cells[cur] = compute_new_cell(
                 _assert_cell(cells[prev]),
@@ -182,6 +186,9 @@ def assert_correct_traversal(traversal: list[tuple[int, int]]):
         assert prev in seen, f"invalid traversal: {traversal}"
         seen.add(cur)
 
+def traversal_from_spanning_tree(spanning_tree: nx.Graph) -> list[tuple[int, int]]:
+    source = list(spanning_tree.nodes)[0]
+    return list(nx.bfs_edges(spanning_tree, source=source))
 
 def rotation_matrix(src: NDArray[np.float64], tgt: NDArray[np.float64]) -> NDArray[np.float64]:
     """
