@@ -21,8 +21,10 @@ class PolytopeBuilder:
     def deserialize(filepath: str) -> Polytope:
         with open(filepath, "r") as f:
             data = json.load(f)
-
-        neigh_graph = nx.from_dict_of_lists(data["neighbors"])
+        
+        neighbours = data["neighbors"]
+        neighbours_ints = {int(k): v for k, v in neighbours.items()}
+        neigh_graph = nx.from_dict_of_lists(neighbours_ints)
 
         return Polytope(
             points=np.array(data["points"], dtype=np.float64),
@@ -59,6 +61,22 @@ class PolytopeBuilder:
         neigh_graph = _build_neigh_graph(hull.neighbors)
         return Polytope(vertices, hull.simplices, hull.equations[:, :4], neigh_graph)
 
+    @staticmethod
+    def orthoplex4():
+        vertices = np.array([
+            [1, 0, 0, 0],
+            [-1, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, -1, 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, -1, 0],
+            [0, 0, 0, 1],
+            [0, 0, 0, -1],
+        ])
+
+        hull = ConvexHull(vertices)
+        neigh_graph = _build_neigh_graph(hull.neighbors)
+        return Polytope(vertices, hull.simplices, hull.equations[:, :4], neigh_graph)
 
 def _build_neigh_graph(neighbors: NDArray[np.integer]) -> nx.Graph:
     g = nx.Graph()

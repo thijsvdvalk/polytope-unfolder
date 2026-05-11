@@ -1,9 +1,7 @@
 from __future__ import annotations
-from scipy.spatial import ConvexHull
 import numpy as np
 from numpy.typing import NDArray
 import networkx as nx
-import json
 from dataclasses import dataclass
 from itertools import combinations
 from .overlap import overlaps
@@ -12,8 +10,8 @@ import matplotlib.pyplot as plt
 import matplotlib
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-w = np.array([0, 0, 0, 1])
-
+W = np.array([0, 0, 0, 1])
+SNAP_TOL = 1e-8
 
 @dataclass(frozen=True)
 class Polytope:
@@ -26,9 +24,12 @@ class Polytope:
         self.points.flags.writeable = False
         self.simplices.flags.writeable = False
         self.normals.flags.writeable = False
+        nx.freeze(self.neigh_graph)
 
 
     def unfold(self, traversal: list[tuple[int, int]]) -> Net:
+        assert_correct_traversal(traversal)
+
         cells: list[Cell | None] = [None] * len(self.simplices)
         first = traversal[0][0]
         cells[first] = compute_first_cell(
@@ -62,17 +63,16 @@ class Net:
     def __getitem__(self, idx: int) -> Cell:
         return _assert_cell(self.cells[idx])
 
-
+# Works only for poly with strict
 def find_shared_vertices(
     verts_a: NDArray[np.float64],
     verts_b: NDArray[np.float64],
-    atol: float = 1e-10,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """Returns (shared_in_a, shared_in_b) — matched rows between two vertex arrays."""
     shared_a, shared_b = [], []
     for i, va in enumerate(verts_a):
         for j, vb in enumerate(verts_b):
-            if np.allclose(va, vb, atol=atol):
+            if np.all(va == vb):
                 shared_a.append(verts_a[i])
                 shared_b.append(verts_b[j])
     return np.array(shared_a), np.array(shared_b)
@@ -93,41 +93,47 @@ class Cell:
         shared, _ = find_shared_vertices(self.poly_vertices, other)
         return shared
 
-    def free_from(self, other: NDArray[np.float64]) -> NDArray[np.float64]:
-        """Returns poly vertices in other that are not in self, shape (1, 4)."""
-        return np.array([
-            v for v in other
-            if not any(np.allclose(v, pv, atol=1e-10) for pv in self.poly_vertices)
-        ])
+    # def free_from(self, other: NDArray[np.float64]) -> NDArray[np.float64]:
+    #     """Returns poly vertices in other that are not in self, shape (1, 4)."""
+    #     return np.array([
+    #         v for v in other
+    #         if not any(np.allclose(v, pv, atol=1e-10) for pv in self.poly_vertices)
+    #     ])
 
     def net_positions_of(self, poly_verts: NDArray[np.float64]) -> NDArray[np.float64]:
         """Given poly vertices, return their corresponding net positions."""
-        _, shared_self = find_shared_vertices(poly_verts, self.poly_vertices)
+        # _, shared_self = find_shared_vertices(poly_verts, self.poly_vertices)
         indices = [
-            i for v in shared_self
+            i for v in poly_verts
             for i, pv in enumerate(self.poly_vertices)
-            if np.allclose(v, pv, atol=1e-10)
+            if np.all(v == pv)
         ]
         return self.net_vertices[indices]
 
-    def assert_3D(self):
-        np.testing.assert_allclose(self.net_vertices[:, 3], 0, atol=1e-10)
+    def assert_3D_and_snap(self):
+        np.testing.assert_allclose(self.net_vertices[:, 3], 0, atol=SNAP_TOL)
+        self.net_vertices[:, 3] = 0
 
-    def assert_placed_correct(self, other: Cell):
+    def assert_placed_correct_and_snap(self, other: Cell):
         for i, v in enumerate(self.poly_vertices):
             for j, pv in enumerate(other.poly_vertices):
-                if np.allclose(v, pv, atol=1e-10):
+                if np.allclose(v, pv, atol=SNAP_TOL):
                     np.testing.assert_allclose(
-                        self.net_vertices[i], other.net_vertices[j], atol=1e-10
+                        self.net_vertices[i], other.net_vertices[j], atol=SNAP_TOL
                     )
+                    self.net_vertices[i] = other.net_vertices[j] # snap
                     break
+
+    def freeze(self):
+        self.poly_vertices.flags.writeable = False
+        self.net_vertices.flags.writeable = False
 
 
 def compute_first_cell(
     points: NDArray[np.float64],
     normal: NDArray[np.float64],
 ) -> Cell:
-    R = rotation_matrix(normal, w)
+    R = rotation_matrix(normal, W)
     points_trans = points - points[0]
     net_points = points_trans @ R.T
     return Cell(poly_vertices=points, net_vertices=net_points)
@@ -148,23 +154,39 @@ def compute_new_cell(
     shared_net_centered = shared_net - shared_net_centroid
 
     src = np.vstack([shared_poly_centered, cur_normal])
-    tgt = np.vstack([shared_net_centered, w])
+    tgt = np.vstack([shared_net_centered, W])
 
     R = rotation_matrix(src, tgt)
 
     new_net_verts = (cur_points - shared_poly_centroid) @ R.T + shared_net_centroid
     new_cell = Cell(poly_vertices=cur_points, net_vertices=new_net_verts)
 
-    new_cell.assert_3D()
-    new_cell.assert_placed_correct(prev_cell)
+    new_cell.assert_3D_and_snap()
+    new_cell.assert_placed_correct_and_snap(prev_cell)
+    new_cell.freeze()
 
     return new_cell
+
 
 def _assert_cell(cell: Cell | None) -> Cell:
     assert cell is not None
     return cell
 
+
+def assert_correct_traversal(traversal: list[tuple[int, int]]):
+    if len(traversal) == 0:
+        return
+
+    seen = {traversal[0][0]}
+    for prev, cur in traversal:
+        assert prev in seen, f"invalid traversal: {traversal}"
+        seen.add(cur)
+
+
 def rotation_matrix(src: NDArray[np.float64], tgt: NDArray[np.float64]) -> NDArray[np.float64]:
+    """
+    Finds rotation matrix that best aligns src onto tgt.
+    """
     src = np.atleast_2d(src)
     tgt = np.atleast_2d(tgt)
     
@@ -176,10 +198,14 @@ def rotation_matrix(src: NDArray[np.float64], tgt: NDArray[np.float64]) -> NDArr
     U, _, Vt = np.linalg.svd(M)
     R = U @ Vt
     
+    # If it is a reflection, convert it to rotation
     if np.linalg.det(R) < 0:
         U[:, -1] *= -1
         R = U @ Vt
     
+    # Assert matrix is actually rotation matrix
+    np.testing.assert_allclose(np.linalg.det(R), 1, atol=SNAP_TOL)
+
     return R
 
 # def tet_faces(verts):

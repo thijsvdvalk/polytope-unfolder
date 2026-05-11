@@ -1,21 +1,27 @@
 import numpy as np
 from numpy.typing import NDArray
 
+"""
+Seperating Axis Theorem.
+"""
+
 def project(vertices, axis):
     """Project all vertices onto axis, return [min, max]."""
     dots = vertices @ axis
     return dots.min(), dots.max()
 
-def separates_strict(axis, verts_a, verts_b):
-    """Check if axis separates the two shapes."""
-    min_a, max_a = project(verts_a, axis)
-    min_b, max_b = project(verts_b, axis)
-    return max_a < min_b or max_b < min_a  # gap between projections
+# def separates(axis, verts_a, verts_b, tol=1e-8):
+#     min_a, max_a = project(verts_a, axis)
+#     min_b, max_b = project(verts_b, axis)
+#     return max_a <= min_b + tol or max_b <= min_a + tol
 
-def separates(axis, verts_a, verts_b, tol=1e-10):
+def separates(axis, verts_a, verts_b):
+    tol = 1000 * np.finfo(np.float64).eps
     min_a, max_a = project(verts_a, axis)
     min_b, max_b = project(verts_b, axis)
-    return max_a <= min_b + tol or max_b <= min_a + tol
+
+    return max_a <= min_b + tol or max_b <= min_a + tol # Have the equals such that touching is allowed
+
 
 def overlaps(tet_a: NDArray[np.float64], tet_b: NDArray[np.float64]) -> bool:
     """Check if two tetrahedra overlap using SAT."""
