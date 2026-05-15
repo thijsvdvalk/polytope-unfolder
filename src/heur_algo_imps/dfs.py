@@ -5,5 +5,5 @@ from polytope_core.polytope import Polytope
 
 class Dfs(HeuristicAlgorithm):
     @classmethod
-    def _spanning_tree(cls, polytope: Polytope) -> nx.Graph:
-        return nx.dfs_tree(polytope.neigh_graph, source=0).to_undirected()
+    def _spanning_tree(cls, polytope: Polytope, source: int = 0) -> nx.Graph:
+        return nx.dfs_tree(polytope.neigh_graph, source=source).to_undirected()

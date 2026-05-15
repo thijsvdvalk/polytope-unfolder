@@ -4,3 +4,4 @@ networkx>=3.0
 pytest
 matplotlib
 hypothesis
+statsmodels
