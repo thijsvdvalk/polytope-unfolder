@@ -3,20 +3,18 @@ import numpy as np
 from numpy.typing import NDArray
 import networkx as nx
 from dataclasses import dataclass
-from itertools import combinations
-from .overlap import overlaps
-
 
 W = np.array([0, 0, 0, 1])
 SNAP_TOL = 1e-8
 
-
-@dataclass(frozen=True)
+@dataclass
 class Polytope:
     points: NDArray[np.float64]
     simplices: NDArray[np.integer]
     normals: NDArray[np.float64]
     neigh_graph: nx.Graph
+    edge_weights_initialized: bool = False 
+    node_weights_initialized: bool = False 
 
     def __post_init__(self):
         self.points.flags.writeable = False
@@ -24,29 +22,59 @@ class Polytope:
         self.normals.flags.writeable = False
         nx.freeze(self.neigh_graph)
 
-    def unfold_from_spanning_tree(self, spanning_tree: nx.Graph) -> Net:
+    def overlap_free_unfolding(self, spanning_tree: nx.Graph) -> bool:
         traversal = traversal_from_spanning_tree(spanning_tree)
-        return self._unfold(traversal)
+        return self._overlap_free_unfolding_from_traversal(traversal)
 
-    def _unfold(self, traversal: list[tuple[int, int]]) -> Net:
+
+    def _overlap_free_unfolding_from_traversal(self, traversal: list[tuple[int, int]]) -> bool:
         cells: list[Cell | None] = [None] * len(self.simplices)
         first = traversal[0][0]
+
+        cells_placed = set()
 
         cells[first] = compute_first_cell(
             self.points[self.simplices[first]],
             self.normals[first],
         )
 
+        cells_placed.add(first)
+
         for prev, cur in traversal:
-            cells[cur] = compute_new_cell(
+            new_cell = compute_new_cell(
                 _assert_cell(cells[prev]),
                 self.points[self.simplices[cur]],
                 self.normals[cur],
             )
 
-        cells_not_none = [_assert_cell(cell) for cell in cells]
-        return Net(self, traversal, cells_not_none)
+            cells[cur] = new_cell
 
+            # Now need to check with all the already placed cells. 
+            for cell in cells_placed:
+                if cell != prev and new_cell.overlaps_with(cells[cell]):
+                    return False
+
+            cells_placed.add(cur)
+
+        return True
+
+    def init_edge_weigths(self):
+        g = self.neigh_graph
+        for u,v in g.edges():
+            g[u][v]['dihedral_angle'] = compute_dihedral_angle(self.normals[u], self.normals[v])
+            shared_simp = list(set(self.simplices[u]) & set(self.simplices[v]))
+            g[u][v]['shared_face_area'] = compute_shared_face_area(self.points[shared_simp])
+            g[u][v]['centroids_distance'] = compute_centroids_distance(self.points[self.simplices[u]], self.points[self.simplices[v]])
+        
+        self.edge_weights_initialized = True
+
+    def init_node_weigths(self):
+        g = self.neigh_graph
+        for node, data in g.nodes(data=True):
+            data['volume'] = compute_volume(self.points[self.simplices[node]])
+            data['aspect_ratio'] = compute_aspect_ratio(self.points[self.simplices[node]])
+            
+        self.node_weights_initialized = True
 
 @dataclass(frozen=True)
 class Net:
@@ -54,20 +82,6 @@ class Net:
     traversal: list[tuple[int, int]]
     cells: list[Cell]
 
-    def overlaps(self) -> bool:
-        traversal_set = set(self.traversal)
-        n = len(self.cells)
-        to_check = [
-            x for x in list(combinations(range(n), 2)) if x not in traversal_set
-        ]
-
-        return any(
-            overlaps(self[i].net_vertices_3d, self[j].net_vertices_3d)
-            for i, j in to_check
-        )
-
-    def __getitem__(self, idx: int) -> Cell:
-        return self.cells[idx]
 
 
 def find_shared_vertices(
@@ -84,10 +98,20 @@ def find_shared_vertices(
     return np.array(shared_a), np.array(shared_b)
 
 
-@dataclass(frozen=True)
+@dataclass()
 class Cell:
     poly_vertices: NDArray[np.float64]  # shape (4, 4) original 4D positions
-    net_vertices: NDArray[np.float64]  # shape (4, 4) placed positions (w=0)
+    net_vertices: NDArray[np.float64]  # shape (4, 3) placed positions (w=0)
+    
+
+    def __post_init__(self):
+        verts = self.net_vertices[:, :3]
+        self._net_vertices_3d = verts
+        self._face_normals = face_normals(verts)
+        self._edges = edges(verts)
+        self._bbox_min = verts.min(axis=0)
+        self._bbox_max = verts.max(axis=0)
+        
 
     @property
     def net_vertices_3d(self) -> NDArray[np.float64]:
@@ -108,23 +132,43 @@ class Cell:
         ]
         return self.net_vertices[indices]
 
-    def assert_3D_and_snap(self):
-        np.testing.assert_allclose(self.net_vertices[:, 3], 0, atol=SNAP_TOL)
-        self.net_vertices[:, 3] = 0
+    def overlaps_with(self, other: Cell) -> bool:
+        if not self._bboxes_overlap(other):
+            return False
 
-    def assert_placed_correct_and_snap(self, other: Cell):
-        for i, v in enumerate(self.poly_vertices):
-            for j, pv in enumerate(other.poly_vertices):
-                if np.allclose(v, pv, atol=SNAP_TOL):
-                    np.testing.assert_allclose(
-                        self.net_vertices[i], other.net_vertices[j], atol=SNAP_TOL
-                    )
-                    self.net_vertices[i] = other.net_vertices[j]  # snap
-                    break
+        verts_a = self._net_vertices_3d
+        verts_b = other._net_vertices_3d
 
-    def freeze(self):
-        self.poly_vertices.flags.writeable = False
-        self.net_vertices.flags.writeable = False
+        # Face normals first — most likely to separate, cheap early exit
+        for axis in self._face_normals:
+            if separates(axis, verts_a, verts_b):
+                return False
+
+        for axis in other._face_normals:
+            if separates(axis, verts_a, verts_b):
+                return False
+
+        # All 36 edge cross products at once
+        ea = self._edges[:, np.newaxis, :]  # (6, 1, 3)
+        eb = other._edges[np.newaxis, :, :]  # (1, 6, 3)
+        axes = np.cross(ea, eb).reshape(-1, 3)  # (36, 3)
+
+        # Filter degenerate axes
+        axes = np.array([a for a in axes if not np.allclose(a, 0)])
+
+        # Project all axes at once
+        dots_a = verts_a @ axes.T  # (4, n_axes)
+        dots_b = verts_b @ axes.T  # (4, n_axes)
+
+        TOL = 1000 * np.finfo(np.float64).eps
+
+        sep = ((dots_a.max(axis=0) <= dots_b.min(axis=0) + TOL) |
+               (dots_b.max(axis=0) <= dots_a.min(axis=0) + TOL))
+
+        return not sep.any()
+
+    def _bboxes_overlap(self, other: Cell) -> np.bool:
+        return np.all(self._bbox_max >= other._bbox_min) and np.all(other._bbox_max >= self._bbox_min)
 
 
 def compute_first_cell(
@@ -134,7 +178,9 @@ def compute_first_cell(
     R = rotation_matrix(normal, W)
     points_trans = points - points[0]
     net_points = points_trans @ R.T
-    return Cell(poly_vertices=points, net_vertices=net_points)
+    assert_3D_and_snap(net_points)
+    cell = Cell(poly_vertices=points, net_vertices=net_points)
+    return cell
 
 
 def compute_new_cell(
@@ -157,13 +203,10 @@ def compute_new_cell(
     R = rotation_matrix(src, tgt)
 
     new_net_verts = (cur_points - shared_poly_centroid) @ R.T + shared_net_centroid
-    new_cell = Cell(poly_vertices=cur_points, net_vertices=new_net_verts)
 
-    new_cell.assert_3D_and_snap()
-    new_cell.assert_placed_correct_and_snap(prev_cell)
-    new_cell.freeze()
-
-    return new_cell
+    assert_3D_and_snap(new_net_verts)
+    assert_placed_correct_and_snap(cur_points, new_net_verts, prev_cell)
+    return Cell(cur_points, new_net_verts)
 
 
 def _assert_cell(cell: Cell | None) -> Cell:
@@ -200,3 +243,88 @@ def rotation_matrix(
     np.testing.assert_allclose(np.linalg.det(R), 1, atol=SNAP_TOL)
 
     return R
+
+
+
+def assert_3D_and_snap(net_verts):
+    np.testing.assert_allclose(net_verts[:, 3], 0, atol=SNAP_TOL)
+    net_verts[:, 3] = 0
+
+def assert_placed_correct_and_snap(poly_vertices, net_vertices, other: Cell):
+    for i, v in enumerate(poly_vertices):
+        for j, pv in enumerate(other.poly_vertices):
+            if np.allclose(v, pv, atol=SNAP_TOL):
+                np.testing.assert_allclose(
+                    net_vertices[i], other.net_vertices[j], atol=SNAP_TOL
+                )
+                net_vertices[i] = other.net_vertices[j]  # snap
+                break
+
+
+def project(vertices, axis):
+    """Project all vertices onto axis, return [min, max]."""
+    dots = vertices @ axis
+    return dots.min(), dots.max()
+
+
+def separates(axis, verts_a, verts_b):
+    tol = 1000 * np.finfo(np.float64).eps
+    min_a, max_a = project(verts_a, axis)
+    min_b, max_b = project(verts_b, axis)
+
+    return (
+        max_a <= min_b + tol or max_b <= min_a + tol
+    )  
+
+def face_normals(verts: NDArray) -> NDArray:
+    # face vertex indices
+    i = np.array([0, 0, 0, 1])
+    j = np.array([1, 1, 2, 2])
+    k = np.array([2, 3, 3, 3])
+    e1 = verts[j] - verts[i]  # (4, 3)
+    e2 = verts[k] - verts[i]  # (4, 3)
+    return np.cross(e1, e2)    # (4, 3)
+
+def edges(verts: NDArray) -> NDArray:
+    i = np.array([0, 0, 0, 1, 1, 2])
+    j = np.array([1, 2, 3, 2, 3, 3])
+    return verts[j] - verts[i]  # (6, 3)
+
+
+def compute_dihedral_angle(n1, n2):
+    cos_angle = np.dot(n1, n2) / (np.linalg.norm(n1) * np.linalg.norm(n2))
+    cos_angle = np.clip(cos_angle, -1, 1)
+    return np.arccos(cos_angle)
+
+
+def compute_shared_face_area(triangle: NDArray[np.float64]):
+    # triangle: (3, 4) array, 3 vertices each with 4 coordinates
+    a, b, c = triangle
+    ab = b - a
+    ac = c - a
+    # Area = 0.5 * sqrt(|ab|^2 * |ac|^2 - (ab . ac)^2)
+    # This is from the identity |u x v|^2 = |u|^2|v|^2 - (u.v)^2
+    area = 0.5 * np.sqrt(np.dot(ab, ab) * np.dot(ac, ac) - np.dot(ab, ac)**2)
+    return area
+
+def compute_centroids_distance(tet1: NDArray[np.float64], tet2: NDArray[np.float64]) -> np.float64:
+    centroid1 = tet1.mean(axis=0)
+    centroid2 = tet2.mean(axis=0)
+    return np.float64(np.linalg.norm(centroid1 - centroid2))
+
+def compute_volume(verts):
+    a, b, c, d = verts
+    # 3 edge vectors, each of length 4
+    mat = np.array([a - d, b - d, c - d])  # shape (3, 4)
+    # Gram matrix: dot products of all edge vector pairs
+    gram = mat @ mat.T                      # shape (3, 3)
+    return np.sqrt(abs(np.linalg.det(gram))) / 6
+
+
+def compute_aspect_ratio(verts):
+    # tet: (4, 4) array of 4 vertices in 4D
+    edges = []
+    for i in range(4):
+        for j in range(i+1, 4):
+            edges.append(np.linalg.norm(verts[i] - verts[j]))
+    return max(edges) / min(edges)

@@ -25,7 +25,7 @@ from pathlib import Path
 from polytope_core.builder import PolytopeBuilder as pb
 from multiprocessing import Pool
 import json
-from heur_algo_imps import Dfs, Bfs
+from heur_algo_imps import *
 
 DATASET_DIR = Path("../polytopes_dataset") / "normal_distribution"
 N_CORES = 4
@@ -33,8 +33,8 @@ N_CORES = 4
 def process_polytope(args):
     facet_dir, i, algo = args
     polytope = pb.deserialize(DATASET_DIR / facet_dir / f"polytope_{i}.json")
-    net = polytope.unfold_from_spanning_tree(algo.spanning_tree(polytope))
-    return i, not net.overlaps()
+    net = polytope.overlap_free_unfolding(algo.spanning_tree(polytope))
+    return i, net
 
 def process_facet_dir(facet_dir, algo):
     args = [(facet_dir, i, algo) for i in range(1000)]

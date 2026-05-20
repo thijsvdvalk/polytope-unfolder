@@ -8,7 +8,7 @@ import random
 def brute_force_all_net(polytope: Polytope):
     """Brute forces every spanning tree to test for all-net property."""
     for tree in nx.SpanningTreeIterator(polytope.neigh_graph):
-        assert not polytope.unfold_from_spanning_tree(tree).overlaps()
+        assert polytope.overlap_free_unfolding(tree)
 
 
 # def test_orthoplex_all_net_brute_force():
@@ -27,11 +27,12 @@ def test_orthoplex_all_net_sampled():
     orthoplex = pb.orthoplex4()
     for _ in range(100):
         st = nx.random_spanning_tree(orthoplex.neigh_graph)
-        assert not orthoplex.unfold_from_spanning_tree(st).overlaps()
+        assert orthoplex.overlap_free_unfolding(st)
+        # assert not orthoplex.unfold_from_spanning_tree(st).overlaps()
 
 
 @given(st.integers(min_value=5, max_value=50))
-@settings(max_examples=10, deadline=None)
+@settings(max_examples=20, deadline=None)
 def test_overlap_invariant_to_traversal_order(num_points):
     """Any traversal order of the same spanning tree should yield the same result for overlap."""
     polytope = pb.random_normal(num_points)
@@ -40,8 +41,7 @@ def test_overlap_invariant_to_traversal_order(num_points):
     results = set()
     for _ in range(10):
         traversal = random_traversal_sp(sp)
-        net = polytope._unfold(traversal)
-        result = net.overlaps()
+        result = polytope._overlap_free_unfolding_from_traversal(traversal)
         results.add(result)
 
     assert len(results) == 1, (
