@@ -7,7 +7,7 @@ This repository contains code that implements:
 
 ## Setup environment
 
-All the dependencies are listed in `requirements.txt`. The repository is developend and tested on a Linux machine running `python 3.14.4`, however it should work fine for other OS's and probably for most other python versions >=3.0.0 as well.
+All the dependencies are listed in `requirements.txt`. The repository is developend and tested on a Linux machine running `python 3.14.4`, however it should work fine for other OS's and probably for most other python versions `>=3.0.0` as well.
 
 ## Generate the dataset
 
