@@ -4,6 +4,9 @@ from polytope_core.builder import PolytopeBuilder as pb
 from polytope_core.heur_algo_abc import PriorityTraversalConfig, MSTConfig
 import json
 import multiprocessing as mp
+import numpy as np
+
+np.random.seed(4444)
 
 # --- configs ---
 priority_configs = [

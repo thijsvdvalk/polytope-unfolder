@@ -10,12 +10,6 @@ def brute_force_all_net(polytope: Polytope):
     for tree in nx.SpanningTreeIterator(polytope.neigh_graph):
         assert polytope.overlap_free_unfolding(tree)
 
-
-# def test_orthoplex_all_net_brute_force():
-#     orthoplex = pb.orthoplex4()
-#     brute_force_all_net(orthoplex)
-
-
 def test_simplex_all_net_brute_force():
     """Brute forces the simplex-4 to test for the proven all-net property."""
     simplex = pb.simplex4()
