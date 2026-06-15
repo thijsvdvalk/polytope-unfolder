@@ -6,3 +6,9 @@ __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
+plots/
+figures/
+
+*.png
+*.svg
+*.pdf

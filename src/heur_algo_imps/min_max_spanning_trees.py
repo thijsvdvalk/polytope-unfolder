@@ -5,7 +5,7 @@ from polytope_core.polytope import Polytope
 import numpy as np
 
 
-class MinMaxSpanningTree(HeuristicAlgorithm):
+class MinSpanningTree(HeuristicAlgorithm):
     @classmethod
     def _spanning_tree(cls, polytope: Polytope, config: MSTConfig) -> nx.Graph:
         assert polytope.edge_weights_initialized
@@ -16,9 +16,4 @@ class MinMaxSpanningTree(HeuristicAlgorithm):
         for u, v in g.edges():
             g[u][v]['weight'] = g[u][v]['dihedral_angle'] * a + g[u][v]['shared_face_area'] * b + g[u][v]['centroids_distance'] * c
 
-        if config.max_spanning_tree:
-            return nx.maximum_spanning_tree(g, weight='weight')
-        else:
-            return nx.minimum_spanning_tree(g, weight='weight')
-        
-
+        return nx.minimum_spanning_tree(g, weight='weight')

@@ -62,14 +62,15 @@ traversal_configs = [
     RandomSpanningTree
 ]
 
-DATASET_DIR = Path("../polytopes_dataset") / "normal_distribution"
-facet_dirs = [f"{i}-{i+4}_facets" for i in range(5, 100, 5)]
+DATASET_DIR = Path("../polytopes_dataset")
+facet_dirs = [f"{2**i}-{(2**(i+1)) - 1}_facets" for i in range(2, 11)]
+distributions = ['normal', 'uniform', 'exponential', 'uniform_on_hypersphere']
 
-def get_output_file(facet_dir: str) -> Path:
-    return DATASET_DIR / facet_dir / "heuristic_results.json"
+def get_output_file(facet_dir: str, distribution) -> Path:
+    return DATASET_DIR / distribution / facet_dir / "heuristic_results.json"
 
-def load_results(facet_dir: str) -> dict:
-    output_file = get_output_file(facet_dir)
+def load_results(facet_dir: str, distribution: str) -> dict:
+    output_file = get_output_file(facet_dir, distribution)
     if not output_file.exists():
         return {}
     try:
@@ -78,17 +79,17 @@ def load_results(facet_dir: str) -> dict:
     except json.JSONDecodeError:
         return {}
 
-def save_results(facet_dir: str, results: dict):
-    output_file = get_output_file(facet_dir)
+def save_results(facet_dir: str, distribution: str, results: dict):
+    output_file = get_output_file(facet_dir, distribution)
     output_file.parent.mkdir(parents=True, exist_ok=True)
     with open(output_file, "w") as f:
         json.dump(results, f, indent=2)
 
 def process_batch(args):
-    facet_dir, batch_start, lock = args
+    facet_dir, distribution, batch_start, lock = args
     batch_results = {}
     with lock:
-        existing = load_results(facet_dir)
+        existing = load_results(facet_dir, distribution)
 
     for i in range(batch_start, batch_start + 100):
         polytope_key = f"polytope_{i}"
@@ -97,7 +98,7 @@ def process_batch(args):
             continue
 
         try:
-            polytope = pb.deserialize(DATASET_DIR / facet_dir / f"polytope_{i}.json")
+            polytope = pb.deserialize(DATASET_DIR / distribution / facet_dir / f"polytope_{i}.json")
             polytope.init_node_weigths()
             polytope.init_edge_weigths()
         except Exception as e:
@@ -134,24 +135,25 @@ def process_batch(args):
 
     # write all 100 at once
     with lock:
-        results = load_results(facet_dir)
+        results = load_results(facet_dir, distribution)
         results.update(batch_results)
-        save_results(facet_dir, results)
+        save_results(facet_dir, distribution, results)
 
     print(f"Done batch: {facet_dir} polytopes {batch_start}-{batch_start+99}")
 
 
 if __name__ == "__main__":
-    # tasks are (facet_dir, batch_start) — 100 polytopes per task
+    print("heii")
     tasks = [
-        (facet_dir, batch_start)
+        (facet_dir, distribution, batch_start)
         for facet_dir in facet_dirs
-        for batch_start in range(0, 1000, 100)
+        for distribution in distributions
+        for batch_start in range(0, 500, 100)
     ]
 
     manager = mp.Manager()
     lock = manager.Lock()
-    tasks = [(fd, bs, lock) for fd, bs in tasks]
+    tasks = [(fd, dis, bs, lock) for fd, dis, bs in tasks]
 
     print(f"{len(tasks)} batches to process")
 

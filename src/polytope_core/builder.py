@@ -39,9 +39,26 @@ class PolytopeBuilder:
         )
 
     @staticmethod
-    def random_normal(num_points: int):
+    def random_normal(num_points: int) -> Polytope:
         points = np.random.randn(num_points, 4)
         return polytope_from_hull_vertices(points)
+
+    @staticmethod
+    def random_uniform(num_points: int) -> Polytope:
+        points = np.random.uniform(-1, 1, (num_points, 4))
+        return polytope_from_hull_vertices(points)
+
+    @staticmethod
+    def random_exponential(num_points: int) -> Polytope:
+        points = np.random.exponential(scale=1, size=(num_points, 4))
+        return polytope_from_hull_vertices(points)
+
+    @staticmethod
+    def uniform_on_hypersphere(num_points: int) -> Polytope:
+        points = np.random.normal(0, 1, size=(num_points, 4))
+        points /= np.linalg.norm(points, axis=1, keepdims=True)
+        return polytope_from_hull_vertices(points)
+
 
     @staticmethod
     def simplex4():

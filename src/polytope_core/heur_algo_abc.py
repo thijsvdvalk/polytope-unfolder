@@ -31,10 +31,15 @@ class MSTConfig(HeuristicConfig):
     dihedral_angle: float 
     shared_face_area: float 
     centroids_distance: float
-    max_spanning_tree: bool
+
+    def __str__(self):
+        return f"MSTConfig: a={self.dihedral_angle}, b={self.shared_face_area}, c={self.centroids_distance}"
+
 
 @dataclass
 class PriorityTraversalConfig(HeuristicConfig):
     volume: float
     aspect_ratio: float
-    max_is_priority: bool
+
+    def __str__(self):
+        return f"PriorityTraversalConfig: a={self.volume}, b={self.aspect_ratio}"

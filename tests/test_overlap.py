@@ -3,7 +3,6 @@ from numpy.typing import NDArray
 from itertools import combinations
 from hypothesis.extra.numpy import arrays
 from hypothesis import given, assume, strategies as st
-from polytope_core.overlap import overlaps
 from fp_error_consts import DEGENERATE_TOL
 from polytope_core.polytope import Cell
 

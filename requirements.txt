@@ -1,7 +1,30 @@
-numpy>=2.0.0
-scipy>=1.10.0
-networkx>=3.0
-pytest
-matplotlib
-hypothesis
-statsmodels
+contourpy==1.3.3
+cycler==0.12.1
+fonttools==4.62.1
+hypothesis==6.152.5
+iniconfig==2.3.0
+kiwisolver==1.5.0
+matplotlib==3.10.9
+networkx==3.6.1
+numpy==2.4.4
+packaging==26.2
+pandas==3.0.3
+patsy==1.0.2
+pillow==12.2.0
+pluggy==1.6.0
+# Editable Git install with no remote (polytope-unfolder==0.1.0)
+-e /home/thijsvalk/Documents/tu-delft/rp/polytope-unfolder
+Pygments==2.20.0
+pyparsing==3.3.2
+PyQt5==5.15.11
+PyQt5-Qt5==5.15.18
+PyQt5_sip==12.18.0
+pytest==9.0.3
+python-dateutil==2.9.0.post0
+scipy==1.17.1
+six==1.17.0
+sortedcontainers==2.4.0
+statsmodels==0.14.6
+# tikzplotlib==0.10.1
+tikzplotlib-patched
+jinja2

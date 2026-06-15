@@ -10,12 +10,11 @@ class PriorityTraversal(HeuristicAlgorithm):
     @classmethod
     def _spanning_tree(cls, polytope: Polytope, config: PriorityTraversalConfig) -> nx.Graph:
         g = polytope.neigh_graph
-        max = -1 if config.max_is_priority else False
         a, b = config.volume, config.aspect_ratio
 
         min_node: tuple[int, float] | None = None
         for node, data in g.nodes(data=True):
-            data['weight'] = (data['volume'] * a + data['aspect_ratio'] * b) * max
+            data['weight'] = data['volume'] * a + data['aspect_ratio'] * b
             if min_node is None:
                 min_node = node, data['weight']
             elif data['weight'] < min_node[1]:
@@ -41,4 +40,3 @@ class PriorityTraversal(HeuristicAlgorithm):
                     hq.heappush(pq, (g.nodes[neighbor]['weight'], neighbor, node))
 
         return st
-
