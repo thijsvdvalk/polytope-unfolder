@@ -6,6 +6,7 @@ from hypothesis import given, assume, strategies as st
 from fp_error_consts import DEGENERATE_TOL
 from polytope_core.polytope import Cell
 
+
 def diameter(tet: NDArray[np.float64]) -> np.float64:
     return np.float64(
         max(np.linalg.norm(tet[i] - tet[j]) for i, j in combinations(range(4), 2))
@@ -49,6 +50,7 @@ def test_not_overlapping_by_big_translation(tet_1, direction):
     assert not cell_2.overlaps_with(cell_1)
     assert not cell_1.overlaps_with(cell_2)
 
+
 @given(random_tet(), three_random_points())
 def test_overlapping_by_point_other_tet_at_centroid(tet_1, three_points):
     """Having one vertice of tet_2 at the center of tet_1 should yield overlap."""
@@ -60,6 +62,7 @@ def test_overlapping_by_point_other_tet_at_centroid(tet_1, three_points):
 
     assert cell_1.overlaps_with(cell_2)
     assert cell_2.overlaps_with(cell_1)
+
 
 @given(
     random_tet(),
@@ -86,6 +89,7 @@ def test_shared_face_no_overlap(tet_1, free_2):
 
     assert not cell_1.overlaps_with(cell_2)
     assert not cell_2.overlaps_with(cell_1)
+
 
 # @given(random_tet(), three_random_points())
 # def test_overlapping_by_point_other_tet_at_centroid(tet_1, three_points):

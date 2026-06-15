@@ -8,18 +8,19 @@ import heapq as hq
 
 class PriorityTraversal(HeuristicAlgorithm):
     @classmethod
-    def _spanning_tree(cls, polytope: Polytope, config: PriorityTraversalConfig) -> nx.Graph:
+    def _spanning_tree(
+        cls, polytope: Polytope, config: PriorityTraversalConfig
+    ) -> nx.Graph:
         g = polytope.neigh_graph
         a, b = config.volume, config.aspect_ratio
 
         min_node: tuple[int, float] | None = None
         for node, data in g.nodes(data=True):
-            data['weight'] = data['volume'] * a + data['aspect_ratio'] * b
+            data["weight"] = data["volume"] * a + data["aspect_ratio"] * b
             if min_node is None:
-                min_node = node, data['weight']
-            elif data['weight'] < min_node[1]:
-                min_node = node, data['weight']
-
+                min_node = node, data["weight"]
+            elif data["weight"] < min_node[1]:
+                min_node = node, data["weight"]
 
         visited = set()
         pq = [(min_node[1], min_node[0], None)]
@@ -27,7 +28,7 @@ class PriorityTraversal(HeuristicAlgorithm):
 
         while pq:
             _, node, parent = hq.heappop(pq)
-            if node in visited: 
+            if node in visited:
                 continue
 
             visited.add(node)
@@ -37,6 +38,6 @@ class PriorityTraversal(HeuristicAlgorithm):
 
             for neighbor in polytope.neigh_graph.neighbors(node):
                 if neighbor not in visited:
-                    hq.heappush(pq, (g.nodes[neighbor]['weight'], neighbor, node))
+                    hq.heappush(pq, (g.nodes[neighbor]["weight"], neighbor, node))
 
         return st

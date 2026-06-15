@@ -12,8 +12,16 @@ class MinSpanningTree(HeuristicAlgorithm):
 
         g = polytope.neigh_graph.copy()
 
-        a, b, c = config.dihedral_angle, config.shared_face_area, config.centroids_distance
+        a, b, c = (
+            config.dihedral_angle,
+            config.shared_face_area,
+            config.centroids_distance,
+        )
         for u, v in g.edges():
-            g[u][v]['weight'] = g[u][v]['dihedral_angle'] * a + g[u][v]['shared_face_area'] * b + g[u][v]['centroids_distance'] * c
+            g[u][v]["weight"] = (
+                g[u][v]["dihedral_angle"] * a
+                + g[u][v]["shared_face_area"] * b
+                + g[u][v]["centroids_distance"] * c
+            )
 
-        return nx.minimum_spanning_tree(g, weight='weight')
+        return nx.minimum_spanning_tree(g, weight="weight")

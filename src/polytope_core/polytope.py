@@ -8,14 +8,15 @@ import bisect
 W = np.array([0, 0, 0, 1])
 SNAP_TOL = 1e-8
 
+
 @dataclass
 class Polytope:
     points: NDArray[np.float64]
     simplices: NDArray[np.integer]
     normals: NDArray[np.float64]
     neigh_graph: nx.Graph
-    edge_weights_initialized: bool = False 
-    node_weights_initialized: bool = False 
+    edge_weights_initialized: bool = False
+    node_weights_initialized: bool = False
 
     def __post_init__(self):
         self.points.flags.writeable = False
@@ -27,8 +28,9 @@ class Polytope:
         traversal = traversal_from_spanning_tree(spanning_tree)
         return self._overlap_free_unfolding_from_traversal(traversal)
 
-
-    def _overlap_free_unfolding_from_traversal(self, traversal: list[tuple[int, int]]) -> bool:
+    def _overlap_free_unfolding_from_traversal(
+        self, traversal: list[tuple[int, int]]
+    ) -> bool:
         cells: list[Cell | None] = [None] * len(self.simplices)
         first = traversal[0][0]
 
@@ -55,11 +57,8 @@ class Polytope:
             new_min_x = new_cell._bbox_min[0]
             new_max_x = new_cell._bbox_max[0]
 
-            # Insert into sorted list
             bisect.insort(cells_sorted, (new_min_x, cur))
-            # Now need to check with all the already placed cells. 
-        
-                    # Sweep: only check cells whose bbox_min_x <= new_max_x
+
             for min_x, cell_idx in cells_sorted:
                 if min_x > new_max_x:
                     break
@@ -68,52 +67,59 @@ class Polytope:
                 if new_cell.overlaps_with(cells[cell_idx]):
                     return False
 
-            # for cell in cells_placed:
-            #     if cell != prev and new_cell.overlaps_with(cells[cell]):
-            #         return False
-
             cells_placed.add(cur)
 
         return True
 
     def init_edge_weigths(self):
         g = self.neigh_graph
-        for u,v in g.edges():
-            g[u][v]['dihedral_angle'] = compute_dihedral_angle(self.normals[u], self.normals[v])
+        for u, v in g.edges():
+            g[u][v]["dihedral_angle"] = compute_dihedral_angle(
+                self.normals[u], self.normals[v]
+            )
             shared_simp = list(set(self.simplices[u]) & set(self.simplices[v]))
-            g[u][v]['shared_face_area'] = compute_shared_face_area(self.points[shared_simp])
-            g[u][v]['centroids_distance'] = compute_centroids_distance(self.points[self.simplices[u]], self.points[self.simplices[v]])
-        
+            g[u][v]["shared_face_area"] = compute_shared_face_area(
+                self.points[shared_simp]
+            )
+            g[u][v]["centroids_distance"] = compute_centroids_distance(
+                self.points[self.simplices[u]], self.points[self.simplices[v]]
+            )
+
         # Normalize
-        for prop in ['dihedral_angle', 'shared_face_area', 'centroids_distance']:
+        for prop in ["dihedral_angle", "shared_face_area", "centroids_distance"]:
             values = np.array([g[u][v][prop] for u, v in g.edges()])
             min, max = values.min(), values.max()
             for u, v in g.edges():
-                g[u][v][prop] = (g[u][v][prop] - min) / (max - min) if max != min else 0.0
-        
+                g[u][v][prop] = (
+                    (g[u][v][prop] - min) / (max - min) if max != min else 0.0
+                )
+
         self.edge_weights_initialized = True
 
     def init_node_weigths(self):
         g = self.neigh_graph
         for node, data in g.nodes(data=True):
-            data['volume'] = compute_volume(self.points[self.simplices[node]])
-            data['aspect_ratio'] = compute_aspect_ratio(self.points[self.simplices[node]])
-        
-        for prop in ['volume', 'aspect_ratio']:
+            data["volume"] = compute_volume(self.points[self.simplices[node]])
+            data["aspect_ratio"] = compute_aspect_ratio(
+                self.points[self.simplices[node]]
+            )
+
+        for prop in ["volume", "aspect_ratio"]:
             values = np.array([g.nodes[n][prop] for n in g.nodes()])
             min, max = values.min(), values.max()
             for n in g.nodes():
-                g.nodes[n][prop] = (g.nodes[n][prop] - min) / (max - min) if max != min else 0.0
-
+                g.nodes[n][prop] = (
+                    (g.nodes[n][prop] - min) / (max - min) if max != min else 0.0
+                )
 
         self.node_weights_initialized = True
+
 
 @dataclass(frozen=True)
 class Net:
     polytope: Polytope
     traversal: list[tuple[int, int]]
     cells: list[Cell]
-
 
 
 def find_shared_vertices(
@@ -134,7 +140,6 @@ def find_shared_vertices(
 class Cell:
     poly_vertices: NDArray[np.float64]  # shape (4, 4) original 4D positions
     net_vertices: NDArray[np.float64]  # shape (4, 3) placed positions (w=0)
-    
 
     def __post_init__(self):
         verts = self.net_vertices[:, :3]
@@ -143,7 +148,6 @@ class Cell:
         self._edges = edges(verts)
         self._bbox_min = verts.min(axis=0)
         self._bbox_max = verts.max(axis=0)
-        
 
     @property
     def net_vertices_3d(self) -> NDArray[np.float64]:
@@ -194,13 +198,16 @@ class Cell:
 
         TOL = 1000 * np.finfo(np.float64).eps
 
-        sep = ((dots_a.max(axis=0) <= dots_b.min(axis=0) + TOL) |
-               (dots_b.max(axis=0) <= dots_a.min(axis=0) + TOL))
+        sep = (dots_a.max(axis=0) <= dots_b.min(axis=0) + TOL) | (
+            dots_b.max(axis=0) <= dots_a.min(axis=0) + TOL
+        )
 
         return not sep.any()
 
     def _bboxes_overlap(self, other: Cell) -> np.bool:
-        return np.all(self._bbox_max >= other._bbox_min) and np.all(other._bbox_max >= self._bbox_min)
+        return np.all(self._bbox_max >= other._bbox_min) and np.all(
+            other._bbox_max >= self._bbox_min
+        )
 
 
 def compute_first_cell(
@@ -208,7 +215,9 @@ def compute_first_cell(
     normal: NDArray[np.float64],
 ) -> Cell:
     R = rotation_matrix(normal, W)
-    points_trans = points - points[0] # we translate, because we need the hyperplane to include the origin to make the rotation valid.
+    points_trans = (
+        points - points[0]
+    )  # we translate, because we need the hyperplane to include the origin to make the rotation valid.
     net_points = points_trans @ R.T
     assert_3D_and_snap(net_points)
     cell = Cell(poly_vertices=points, net_vertices=net_points)
@@ -234,7 +243,9 @@ def compute_new_cell(
 
     R = rotation_matrix(src, tgt)
 
-    new_net_verts = (cur_points - shared_poly_centroid) @ R.T + shared_net_centroid # again we translate to the origin to make the rotation valid.
+    new_net_verts = (
+        (cur_points - shared_poly_centroid) @ R.T + shared_net_centroid
+    )  # again we translate to the origin to make the rotation valid.
 
     assert_3D_and_snap(new_net_verts)
     assert_placed_correct_and_snap(cur_points, new_net_verts, prev_cell)
@@ -277,10 +288,10 @@ def rotation_matrix(
     return R
 
 
-
 def assert_3D_and_snap(net_verts):
     np.testing.assert_allclose(net_verts[:, 3], 0, atol=SNAP_TOL)
     net_verts[:, 3] = 0
+
 
 def assert_placed_correct_and_snap(poly_vertices, net_vertices, other: Cell):
     for i, v in enumerate(poly_vertices):
@@ -304,9 +315,8 @@ def separates(axis, verts_a, verts_b):
     min_a, max_a = project(verts_a, axis)
     min_b, max_b = project(verts_b, axis)
 
-    return (
-        max_a <= min_b + tol or max_b <= min_a + tol
-    )  
+    return max_a <= min_b + tol or max_b <= min_a + tol
+
 
 def face_normals(verts: NDArray) -> NDArray:
     # face vertex indices
@@ -315,7 +325,8 @@ def face_normals(verts: NDArray) -> NDArray:
     k = np.array([2, 3, 3, 3])
     e1 = verts[j] - verts[i]  # (4, 3)
     e2 = verts[k] - verts[i]  # (4, 3)
-    return np.cross(e1, e2)    # (4, 3)
+    return np.cross(e1, e2)  # (4, 3)
+
 
 def edges(verts: NDArray) -> NDArray:
     i = np.array([0, 0, 0, 1, 1, 2])
@@ -336,20 +347,24 @@ def compute_shared_face_area(triangle: NDArray[np.float64]):
     ac = c - a
     # Area = 0.5 * sqrt(|ab|^2 * |ac|^2 - (ab . ac)^2)
     # This is from the identity |u x v|^2 = |u|^2|v|^2 - (u.v)^2
-    area = 0.5 * np.sqrt(np.dot(ab, ab) * np.dot(ac, ac) - np.dot(ab, ac)**2)
+    area = 0.5 * np.sqrt(np.dot(ab, ab) * np.dot(ac, ac) - np.dot(ab, ac) ** 2)
     return area
 
-def compute_centroids_distance(tet1: NDArray[np.float64], tet2: NDArray[np.float64]) -> np.float64:
+
+def compute_centroids_distance(
+    tet1: NDArray[np.float64], tet2: NDArray[np.float64]
+) -> np.float64:
     centroid1 = tet1.mean(axis=0)
     centroid2 = tet2.mean(axis=0)
     return np.float64(np.linalg.norm(centroid1 - centroid2))
+
 
 def compute_volume(verts: NDArray[np.float64]):
     a, b, c, d = verts
     # 3 edge vectors, each of length 4
     mat = np.array([a - d, b - d, c - d])  # shape (3, 4)
     # Gram matrix: dot products of all edge vector pairs
-    gram = mat @ mat.T                      # shape (3, 3)
+    gram = mat @ mat.T  # shape (3, 3)
     return np.sqrt(abs(np.linalg.det(gram))) / 6
 
 
@@ -357,6 +372,6 @@ def compute_aspect_ratio(verts: NDArray[np.float64]):
     # tet: (4, 4) array of 4 vertices in 4D
     edges = []
     for i in range(4):
-        for j in range(i+1, 4):
+        for j in range(i + 1, 4):
             edges.append(np.linalg.norm(verts[i] - verts[j]))
     return max(edges) / min(edges)

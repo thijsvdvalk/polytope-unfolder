@@ -7,3 +7,7 @@ class RandomSpanningTree(HeuristicAlgorithm):
     @classmethod
     def _spanning_tree(cls, polytope: Polytope, config) -> nx.Graph:
         return nx.random_spanning_tree(polytope.neigh_graph)
+
+    @classmethod
+    def id(cls):
+        return "RST()"

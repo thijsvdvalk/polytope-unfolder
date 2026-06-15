@@ -59,7 +59,6 @@ class PolytopeBuilder:
         points /= np.linalg.norm(points, axis=1, keepdims=True)
         return polytope_from_hull_vertices(points)
 
-
     @staticmethod
     def simplex4():
         vertices = np.array(

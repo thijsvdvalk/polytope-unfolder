@@ -5,46 +5,53 @@ from pathlib import Path
 
 np.random.seed(4444)
 
-BUCKET_WIDTH = 5
-MIN_FACETS = 5
-MAX_FACETS = 100
-MAX_SAMPLE_POINTS = int(
-    MAX_FACETS / 2
-)  # Works fine for 100 facets, but propabley doesn't scale
-BUCKET_VOLUME = 1000
-
+BUCKETS = [
+    (4, 8),
+    (8, 16),
+    (16, 32),
+    (32, 64),
+    (64, 128),
+    (128, 256),
+]
+MAX_SAMPLE_POINTS = 2000
+BUCKET_VOLUME = 500
 
 bucket_count = defaultdict(int)
-buckets = range(MIN_FACETS, MAX_FACETS, BUCKET_WIDTH)
-
-bucket_dict = {}
-all_bucket_dirs = []
-for bucket in buckets:
-    bucket_dir = f"{bucket}-{bucket + BUCKET_WIDTH - 1}"
-    all_bucket_dirs.append(bucket_dir)
-    for i in range(BUCKET_WIDTH):
-        bucket_dict[bucket + i] = bucket_dir
+all_bucket_dirs = [f"{lo}-{hi - 1}" for lo, hi in BUCKETS]
 
 
-while True:
-    num_points = np.random.randint(5, MAX_SAMPLE_POINTS)
-    polytope = pb.random_normal(num_points)
-    num_facets = len(polytope.simplices)
-    if num_facets >= MAX_FACETS or num_facets < 5:
-        continue
+def get_bucket_dir(num_facets):
+    for lo, hi in BUCKETS:
+        if lo <= num_facets < hi:
+            return f"{lo}-{hi - 1}"
+    return None
 
-    bucket_dir = bucket_dict[num_facets]
-    if bucket_count[bucket_dir] < BUCKET_VOLUME:
+
+for name, gen in [
+    ("normal", pb.random_normal),
+    ("uniform", pb.random_uniform),
+    ("exponential", pb.random_exponential),
+    ("uniform_on_hypersphere", pb.uniform_on_hypersphere),
+]:
+    while True:
+        num_points = int(np.exp(np.random.uniform(np.log(5), np.log(10 * 256))))
+        polytope = gen(num_points)
+        num_facets = len(polytope.simplices)
+
+        bucket_dir = get_bucket_dir(num_facets)
+        if bucket_dir is None:
+            continue
+        if bucket_count[bucket_dir] >= BUCKET_VOLUME:
+            continue
+
         outputfile = (
-            Path("polytopes_dataset")
-            / "normal_distribution"
+            Path("../polytopes_dataset")
+            / name
             / f"{bucket_dir}_facets"
             / f"polytope_{bucket_count[bucket_dir]}.json"
         )
         pb.serialize(polytope, outputfile)
         bucket_count[bucket_dir] += 1
 
-        if all(
-            bucket_count[bucket_dir] == BUCKET_VOLUME for bucket_dir in all_bucket_dirs
-        ):
+        if all(bucket_count[bd] == BUCKET_VOLUME for bd in all_bucket_dirs):
             break

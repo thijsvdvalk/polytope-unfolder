@@ -7,3 +7,7 @@ class Bfs(HeuristicAlgorithm):
     @classmethod
     def _spanning_tree(cls, polytope: Polytope, config) -> nx.Graph:
         return nx.bfs_tree(polytope.neigh_graph, source=0).to_undirected()
+
+    @classmethod
+    def id(cls):
+        return "BFS()"
