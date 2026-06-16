@@ -1,2 +1,0 @@
-heur_algo_imps
-polytope_core
